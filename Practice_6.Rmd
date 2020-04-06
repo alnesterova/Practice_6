@@ -1,0 +1,285 @@
+---
+title: "Упражнение 6"
+author: "Нестерова А.И."
+date: "28 03 2020"
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Математическое моделирование
+
+## Упражнение 6   
+
+**1** Примените указанный в варианте метод к набору данных по своему варианту (см. таблицу ниже). Не забудьте предварительно сделать из категориальных переменных факторы. Выберите оптимальную модель с помощью кросс-валидации. Выведите её коэффициенты с помощью функции coef(). Рассчитайте MSE модели на тестовой выборке.   
+
+**2** Примените указанный в варианте метод к набору данных по своему варианту (см. таблицу ниже). Для модели:   
+
+ - Подогнать модель на всей выборке и вычислить ошибку (MSE) с кросс-валидацией. По наименьшей MSE подобрать оптимальное значение настроечного параметра метода (гиперпараметр λ или число главных компонент M).
+
+ - Подогнать модель с оптимальным значением параметра на обучающей выборке, посчитать MSE на тестовой.   
+ 
+ - Подогнать модель с оптимальным значением параметра на всех данных, вывести характеристики модели функцией summary().    
+
+**3** Сравните оптимальные модели, полученные в заданиях 1 и 2 по MSE на тестовой выборке. Какой метод дал лучший результат? Доля тестовой выборки: 50%.   
+
+**Как сдавать:** прислать на почту преподавателя ссылки:    
+
+* на html-отчёт с видимыми блоками кода (блоки кода с параметром echo = T), размещённый на [rpubs.com](rpubs.com).    
+* на код, генерирующий отчёт, в репозитории на [github.com](github.com).    
+
+В текст отчёта включить постановку задачи и ответы на вопросы задания. В начале отчёта нужно описать рассматриваемый набор данных: тип и содержание переменных, количество наблюдений.     
+
+### Вариант - 13
+
+*Методы*: отбор оптимального подмножества, гребневая регрессия.
+*Данные*: `Prestige {car}'.
+
+Набор данных `Prestige` содержит переменные:  
+
+- `education` - среднее образование профессиональных сотрудников в 1971 г. (в годах);
+- `income` – средний доход должностных лиц в 1971 г. (в долларах);  
+- `women` – процент работающих женщин;
+- `prestige` – баллы престижа по профессии из социального опроса, проведённого в середине 1960-х годов;
+- `census` - канадская перепись профессиональных кодов;
+- `type` - род занятия. Фактор с уровнями:
+
+**bc** – синие воротнички;
+**prof** – профессионалы, менеджеры и техники;
+**wc** - белые воротнички.
+
+```{r Данные и пакеты, warning = F, message = F}
+library('knitr')             # пакет для генерации отчёта
+library('car')               # набор данных Prestige
+library('leaps')             # функция regsubset() -- отбор оптимального подмножества переменных
+library('glmnet')            # функция glmnet() -- лассо
+
+my.seed <- 1
+
+# загрузка данных Prestige
+data('Prestige')
+# переводим дискретные количественные переменные в факторы
+Prestige$type <- as.factor(Prestige$type)
+```
+
+Набор данных по престижу канадских профессий `Prestige`.   
+
+```{r}
+# название столбцов переменных
+names(Prestige)
+
+# размерность данных
+dim(Prestige)
+```
+
+Считаем число пропусков в данных и убираем их.   
+
+```{r}
+# считаем пропуски
+sum(is.na(Prestige))
+
+# убираем пропуски
+Prestige <- na.omit(Prestige)
+
+# проверяем результат
+dim(Prestige)
+sum(is.na(Prestige))
+```
+
+## Отбор оптимального подмножества
+
+```{r}
+# подгоняем модели с сочетаниями предикторов до 6 (максимум в данных)
+regfit.full <- regsubsets(prestige ~ ., Prestige)
+reg.summary <- summary(regfit.full)
+reg.summary
+
+# структура отчёта по модели (ищем характеристики качества)
+names(reg.summary)
+
+# R^2 и скорректированный R^2
+round(reg.summary$rsq, 3)
+
+# на графике
+plot(1:6, reg.summary$rsq, type = 'b',
+     xlab = 'Количество предикторов', ylab = 'R-квадрат')
+# сюда же добавим скорректированный R-квадрат
+points(1:6, reg.summary$adjr2, col = 'red')
+# модель с максимальным скорректированным R-квадратом
+which.max(reg.summary$adjr2)
+### 4
+points(which.max(reg.summary$adjr2), 
+       reg.summary$adjr2[which.max(reg.summary$adjr2)],
+       col = 'red', cex = 2, pch = 20)
+legend('bottomright', legend = c('R^2', 'R^2_adg'),
+      col = c('black', 'red'), lty = c(1, NA),
+      pch = c(1, 1))
+
+# C_p
+reg.summary$cp
+# число предикторов у оптимального значения критерия
+which.min(reg.summary$cp)
+### 4
+
+# график
+plot(reg.summary$cp, xlab = 'Число предикторов',
+     ylab = 'C_p', type = 'b')
+points(which.min(reg.summary$cp),
+       reg.summary$cp[which.min(reg.summary$cp)], 
+       col = 'red', cex = 2, pch = 20)
+
+# BIC
+reg.summary$bic
+# число предикторов у оптимального значения критерия
+which.min(reg.summary$bic)
+### 4
+
+# график
+plot(reg.summary$bic, xlab = 'Число предикторов',
+     ylab = 'BIC', type = 'b')
+points(which.min(reg.summary$bic),
+       reg.summary$bic[which.min(reg.summary$bic)], 
+       col = 'red', cex = 2, pch = 20)
+
+# метод plot для визуализации результатов
+plot(regfit.full, scale = 'r2')
+plot(regfit.full, scale = 'adjr2')
+plot(regfit.full, scale = 'Cp')
+plot(regfit.full, scale = 'bic')
+
+# коэффициенты модели с наименьшим BIC
+round(coef(regfit.full, 4), 3)
+```
+
+## Нахождение оптимальной модели  при помощи метода перекрёстной проверки 
+
+### k-кратная кросс-валидация  
+
+```{r}
+# отбираем 10 блоков наблюдений
+k <- 10
+set.seed(my.seed)
+folds <- sample(1:k, nrow(Prestige), replace = T)
+
+# заготовка под матрицу с ошибками
+cv.errors <- matrix(NA, k, 6, dimnames = list(NULL, paste(1:6)))
+
+predict.regsubsets = function(object, newdata, id, ...) {
+    form = as.formula(object$call[[2]])
+    mat = model.matrix(form, newdata)
+    coefi = coef(object, id = id)
+    mat[, names(coefi)] %*% coefi}
+
+# заполняем матрицу в цикле по блокам данных
+for (j in 1:k){
+    best.fit <- regsubsets(prestige ~ ., data = Prestige[folds != j, ],
+                           nvmax = 6)
+    # теперь цикл по количеству объясняющих переменных
+    for (i in 1:6){
+        # модельные значения prestige
+        pred <- predict(best.fit, Prestige[folds == j, ], id = i)
+        # вписываем ошибку в матрицу
+        cv.errors[j, i] <- mean((Prestige$prestige[folds == j] - pred)^2)
+    }
+}
+
+# усредняем матрицу по каждому столбцу (т.е. по блокам наблюдений), 
+#  чтобы получить оценку MSE для каждой модели с фиксированным 
+#  количеством объясняющих переменных
+mean.cv.errors <- apply(cv.errors, 2, mean)
+round(mean.cv.errors, 0)
+
+# на графике
+plot(mean.cv.errors, type = 'b')
+points(which.min(mean.cv.errors), mean.cv.errors[which.min(mean.cv.errors)],
+       col = 'red', pch = 20, cex = 2)
+
+# перестраиваем модель с 4 объясняющими переменными на всём наборе данных
+reg.best <- regsubsets(prestige ~ ., data = Prestige, nvmax = 7)
+round(coef(reg.best, 4), 3)
+```
+
+## Гребневая регрессия   
+
+```{r}
+# из-за синтаксиса glmnet() формируем явно матрицу объясняющих...
+x <- model.matrix(prestige ~ ., Prestige)[, -1]
+
+# и вектор значений зависимой переменной
+y <- Prestige$prestige
+```
+
+```{r}
+# вектор значений гиперпараметра лямбда
+grid <- 10^seq(10, -2, length = 100)
+
+# подгоняем ридж-модели с большей точностью (thresh ниже значения по умолчанию) на всех данных
+ridge.mod <- glmnet(x, y, alpha = 0, lambda = grid,
+                    thresh = 1e-12)
+plot(ridge.mod)
+```
+
+### Подбор оптимального значения лямбда с помощью перекрёстной проверки    
+
+```{r}
+# k-кратная кросс-валидация
+set.seed(my.seed)
+
+# оценка ошибки
+cv.out <- cv.glmnet(x, y, alpha = 0)
+plot(cv.out)
+
+# значение лямбда, обеспечивающее минимальную ошибку перекрёстной проверки
+bestlam <- cv.out$lambda.min
+round(bestlam, 0)
+
+# наконец, подгоняем модель для оптимальной лямбды, 
+# найденной по перекрёстной проверке
+out <- glmnet(x, y, alpha = 0)
+round(predict(out, type = 'coefficients', s = bestlam)[1:7, ], 3)
+
+set.seed(my.seed)
+train <- sample(1:nrow(x), nrow(x)/2)
+test <- -train
+y.test <- y[test]
+
+# модель с оптимальным значением параметра на обучающей выборке
+ridge.train <- glmnet(x[train, ], y[train], alpha = 0, lambda = grid,
+                    thresh = 1e-12)
+round(predict(ridge.train, type = 'coefficients', s = bestlam)[1:7, ], 3)
+
+# summary по всей выборке
+ridge.mod1 <- glmnet(x, y, alpha = 0, lambda = bestlam)
+ridge.sum <- summary(ridge.mod1)
+ridge.sum
+
+y_predicted <- predict(ridge.mod1, newx = x)
+sst <- sum((y-mean(y))^2)
+sse <- sum((y_predicted-y)^2)
+
+# R^2
+rsq <- 1-sse/sst
+rsq
+```
+
+## Сравнение оптимальных моделей, полученных в заданиях 1 и 2 по MSE на тестовой выборке (объём выобрки - 50%)
+
+```{r}
+# MSE на тестовой выборке с 4 объясняющими переменными (отбор оптимального подмножества)
+opt.test <- predict(best.fit, Prestige[test, ], id = 4)
+opt.mse.test <- round(mean((opt.test - y.test)^2), 0)
+
+# MSE на тестовой выборке (гребневая регрессия)
+ridge.test <- predict(ridge.mod, s = bestlam, newx = x[test, ])
+ridge.mse.test <- round(mean((ridge.test - y.test)^2), 0)
+
+MSE.test <- rbind(opt.mse.test, ridge.mse.test)
+row.names(MSE.test) <- c('MSE (отбор оптимального подмножества)', 'MSE (гребневая регрессия)')
+kable(MSE.test)
+```
+
+Сравнивая результаты расчётов MSE на тестовой выборке для двух оптимальных моделей, полученных в заданиях 1 и 2, можно заключить, что стандартная ошибка MSE модели №1 (отбор оптимального подмножества) оказалась меньше, чем MSE модели №2. Таким образом, модель №1 (отбор оптимального подмножества) оказалась лучшей.
